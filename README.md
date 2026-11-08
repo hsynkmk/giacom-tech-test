@@ -1,5 +1,34 @@
 # Giacom Tech Test
 
+> **`refactor/clean-architecture` branch: towards production-ready**
+>
+> As an extra, I used **Claude Code** to build this branch. It refactors the service with:
+> - Clean Architecture
+> - a `ServiceResult` pattern
+> - FluentValidation
+> - EF Core 8 with the Pomelo MySQL provider, and Guid ids instead of `byte[]`
+> - global exception handling
+> - health checks
+> - Swagger
+> - API tests
+>
+> The endpoints and their behaviour are the same as on `main`.
+>
+> **What changed on this branch**
+>
+> | Area | Before (`main`) | After |
+> |---|---|---|
+> | Structure | WebAPI / Service / Data / Model | `Order.Domain` → `Order.Application` → `Order.Infrastructure` → `Order.Api`, plus `tests/` with one test project per layer |
+> | Ids | `byte[]` plus an `IsInMemory() ? SequenceEqual : ==` workaround in every query | `Guid`, mapped to `binary(16)` by one EF convention |
+> | Data access | EF Core 6 + Oracle provider, lazy-loading proxies, monthly profit grouped in memory | EF Core 8 + Pomelo, no proxies, everything grouped in SQL, all calls take a `CancellationToken` |
+> | Errors | `null`, a custom enum, and validation split between the controller and the service | `ServiceResult` / `ServiceResult<T>`; the controller maps results to 400/404 `ProblemDetails` |
+> | Validation | Data annotations, `Guid?` workarounds, one DB query per product | FluentValidation validators, with a single query for all products |
+> | Hosting | `Startup` + `Program`, HTTPS redirect on an HTTP-only container | Minimal hosting, `AddApplication()` / `AddInfrastructure()`, a global `IExceptionHandler`, `/health`, Swagger in Development |
+> | Config / Docker | Password in `appsettings.json`; the API starts before MySQL is ready; ports 80/443 exposed; runs as root | Connection string comes from an environment variable; the DB healthcheck makes the API wait; port 8080; runs as non-root |
+> | Tests | 16 tests in one project | 56 tests: validators and service (NSubstitute), repository (SQLite), API end to end (`WebApplicationFactory`) |
+>
+> Money totals are now rounded to 2 decimal places. The provider casts to MySQL's default `decimal(65,30)`, which otherwise produced values like `16.360000000000000000000000000`.
+
 ## Background
 Giacom Cloud Market is a B2B e-commerce platform which allows IT companies (resellers) to buy services indirectly from major vendors (Microsoft, Symantec, Webroot etc) in high volumes at low cost. IT companies then resell the purchased services on to their customers, making a small margin. Behind Cloud Market are several microservices, one of which is an Order API much like the one we are going to work on for this test.
 

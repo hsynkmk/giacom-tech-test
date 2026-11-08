@@ -1,21 +1,33 @@
 services:
   api:
-      build: ./src
-      container_name: order-api
-      ports:
-          - 8000:8080
-      depends_on:
-        - db
-      links:
-        - "db:database"
+    build: ./src
+    container_name: order-api
+    ports:
+      - 8000:8080
+    environment:
+      # Local development credentials only. In a real deployment this would come from a secret store.
+      # SslMode=None: the .NET 8 container can't complete a TLS handshake with MySQL 5.7.
+      - ConnectionStrings__OrderDatabase=server=db;port=3306;user=order-service;password=nmCsdkhj20n@Sa;database=orders;SslMode=None
+    depends_on:
+      db:
+        # Wait until the database is seeded and accepting connections, not just started
+        condition: service_healthy
+
   db:
     image: mysql:5.7
     container_name: order-db
     volumes:
-          - ./mysql-init.sql:/docker-entrypoint-initdb.d/init.sql:delegated
-    environment:      
+      - ./mysql-init.sql:/docker-entrypoint-initdb.d/init.sql:delegated
+    environment:
       - MYSQL_ROOT_PASSWORD=nmCsdkhj20n@Sa
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --lower_case_table_names=1
     ports:
       - 3306:3306
-      
+    healthcheck:
+      # Connects over TCP, which MySQL only allows once the init script has finished,
+      # and checks that the seeded data is actually there.
+      test: ["CMD", "mysql", "-h", "127.0.0.1", "-uorder-service", "-pnmCsdkhj20n@Sa", "-e", "SELECT 1 FROM orders.order_status LIMIT 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
